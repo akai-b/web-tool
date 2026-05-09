@@ -1,3 +1,6 @@
+@import 'tailwindcss';
+@source "../../../packages/**/*.{ts,tsx}";
+@import '../../../packages/ui/src/base.css';
 
 * { box-sizing: border-box; }
 

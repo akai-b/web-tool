@@ -1,7 +1,8 @@
 import React from 'react'
+import { cn } from '../lib/utils'
 
 export interface ToolLayoutProps {
-  title: string
+  title?: string
   description?: string
   children: React.ReactNode
   className?: string
@@ -9,13 +10,15 @@ export interface ToolLayoutProps {
 
 export function ToolLayout({ title, description, children, className = '' }: ToolLayoutProps) {
   return (
-    <div className={`min-h-screen bg-gray-50 ${className}`}>
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <header className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
-          {description && <p className="mt-1 text-sm text-gray-500">{description}</p>}
-        </header>
-        <main>{children}</main>
+    <div className={cn("bg-background", className)}>
+      <div className="max-w-4xl mx-auto px-6 py-6 space-y-5">
+        {(title || description) && (
+          <div>
+            {title && <h2 className="text-base font-semibold text-foreground">{title}</h2>}
+            {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
+          </div>
+        )}
+        {children}
       </div>
     </div>
   )

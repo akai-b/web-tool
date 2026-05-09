@@ -1,8 +1,14 @@
 import React, { useState, useCallback } from 'react'
-import { ToolLayout, DropZone, FileList, Button, ProgressBar } from '@pal/ui'
+import {
+  Card, CardContent,
+  DropZone, FileList, Button,
+  Slider, Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Label, Input, Progress,
+} from '@pal/ui'
 import type { FileItem } from '@pal/ui'
-import { nanoid, formatBytes, calcSavingPercent, downloadBytes } from '@pal/utils'
+import { nanoid, calcSavingPercent, downloadBytes } from '@pal/utils'
 import { compressImage } from './compress'
+import { useSharpCompress } from './useSharpCompress'
 import type { CompressOptions, CompressFileItem } from './types'
 
 export interface ImageCompressToolProps {
@@ -11,8 +17,14 @@ export interface ImageCompressToolProps {
 
 export function ImageCompressTool({ className }: ImageCompressToolProps) {
   const [files, setFiles] = useState<CompressFileItem[]>([])
-  const [options, setOptions] = useState<CompressOptions>({ quality: 80, outputFormat: 'jpeg' })
+  const [options, setOptions] = useState<CompressOptions>({
+    quality: 80,
+    outputFormat: 'jpeg',
+    maxWidth: undefined,
+    maxHeight: undefined,
+  })
   const [processing, setProcessing] = useState(false)
+  const { isAvailable: isSharpAvailable, compressWithSharp } = useSharpCompress()
 
   const handleFiles = useCallback((incoming: File[]) => {
     const items: CompressFileItem[] = incoming.map((f) => ({
@@ -30,26 +42,25 @@ export function ImageCompressTool({ className }: ImageCompressToolProps) {
   const handleCompress = useCallback(async () => {
     if (files.length === 0 || processing) return
     setProcessing(true)
-
     for (const item of files) {
       if (item.status === 'done') continue
       setFiles((prev) => prev.map((f) => f.id === item.id ? { ...f, status: 'processing' } : f))
       try {
-        const result = await compressImage(item.file, options)
+        const result = isSharpAvailable
+          ? await compressWithSharp(item.file, options)
+          : await compressImage(item.file, options)
         setFiles((prev) => prev.map((f) => f.id === item.id ? { ...f, status: 'done', result } : f))
       } catch (e) {
         const error = e instanceof Error ? e.message : '压缩失败'
         setFiles((prev) => prev.map((f) => f.id === item.id ? { ...f, status: 'error', error } : f))
       }
     }
-
     setProcessing(false)
-  }, [files, options, processing])
+  }, [files, options, processing, isSharpAvailable, compressWithSharp])
 
   const handleDownloadAll = useCallback(() => {
     files.forEach((f) => {
       if (f.result) {
-        const arr = new Uint8Array(0) // placeholder — real impl reads blob
         f.result.blob.arrayBuffer().then((buf) => {
           downloadBytes(new Uint8Array(buf), f.result!.filename, f.result!.blob.type)
         })
@@ -70,54 +81,92 @@ export function ImageCompressTool({ className }: ImageCompressToolProps) {
   const progress = files.length > 0 ? (doneCount / files.length) * 100 : 0
 
   return (
-    <ToolLayout title="图片压缩" description="批量压缩 JPEG / PNG / WebP 图片，保留画质" className={className}>
-      <div className="space-y-6">
-        {/* 选项区 */}
-        <div className="flex flex-wrap gap-4 items-end">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-600">质量 ({options.quality})</span>
-            <input
-              type="range" min={1} max={100} value={options.quality}
-              onChange={(e) => setOptions((o) => ({ ...o, quality: Number(e.target.value) }))}
-              className="w-40"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-600">输出格式</span>
-            <select
-              value={options.outputFormat ?? 'jpeg'}
-              onChange={(e) => setOptions((o) => ({ ...o, outputFormat: e.target.value as CompressOptions['outputFormat'] }))}
-              className="border border-gray-300 rounded px-2 py-1 text-sm"
-            >
-              <option value="jpeg">JPEG</option>
-              <option value="png">PNG</option>
-              <option value="webp">WebP</option>
-            </select>
-          </label>
-        </div>
+    <div className="max-w-4xl mx-auto px-6 py-6 space-y-4">
+      {/* 设置区 */}
+      <Card>
+        <CardContent className="pt-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+            <div className="space-y-2">
+              <Label>输出格式</Label>
+              <Select
+                value={options.outputFormat ?? 'jpeg'}
+                onValueChange={(v) => setOptions((o) => ({ ...o, outputFormat: v as CompressOptions['outputFormat'] }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="jpeg">JPEG</SelectItem>
+                  <SelectItem value="png">PNG</SelectItem>
+                  <SelectItem value="webp">WebP</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-        {/* 拖拽区 */}
-        <DropZone accept="image/*" onFiles={handleFiles} className="h-40" />
+            <div className="space-y-2">
+              <Label>
+                质量
+                <span className="ml-1 font-normal text-muted-foreground">({options.quality}%)</span>
+              </Label>
+              <div className="pt-2.5">
+                <Slider
+                  value={[options.quality]}
+                  onValueChange={([value]) => setOptions((o) => ({ ...o, quality: value }))}
+                  min={1}
+                  max={100}
+                  step={1}
+                />
+              </div>
+            </div>
 
-        {/* 文件列表 */}
-        {files.length > 0 && (
-          <>
+            <div className="space-y-2">
+              <Label htmlFor="maxWidth">最大宽度</Label>
+              <Input
+                id="maxWidth"
+                type="number"
+                placeholder="不限 (px)"
+                value={options.maxWidth ?? ''}
+                onChange={(e) => setOptions((o) => ({ ...o, maxWidth: e.target.value ? Number(e.target.value) : undefined }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="maxHeight">最大高度</Label>
+              <Input
+                id="maxHeight"
+                type="number"
+                placeholder="不限 (px)"
+                value={options.maxHeight ?? ''}
+                onChange={(e) => setOptions((o) => ({ ...o, maxHeight: e.target.value ? Number(e.target.value) : undefined }))}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 拖拽上传区 */}
+      <DropZone accept="image/*" onFiles={handleFiles} className="h-36" />
+
+      {/* 文件列表 + 操作 */}
+      {files.length > 0 && (
+        <Card>
+          <CardContent className="pt-5 space-y-3">
             <FileList files={fileItems} onRemove={handleRemove} />
-            {processing && <ProgressBar value={progress} showLabel />}
-            <div className="flex gap-3">
+            {processing && <Progress value={progress} className="h-1.5" />}
+            <div className="flex items-center gap-2 pt-1">
               <Button onClick={handleCompress} disabled={processing}>
                 {processing ? '压缩中…' : '开始压缩'}
               </Button>
               {doneCount > 0 && (
-                <Button variant="secondary" onClick={handleDownloadAll}>
+                <Button variant="outline" onClick={handleDownloadAll}>
                   下载全部 ({doneCount})
                 </Button>
               )}
               <Button variant="ghost" onClick={() => setFiles([])}>清空</Button>
             </div>
-          </>
-        )}
-      </div>
-    </ToolLayout>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   )
 }

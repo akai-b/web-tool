@@ -33,6 +33,9 @@
       ],
       "@pal/tool-gif-maker": [
         "./packages/tool-gif-maker/src/index.ts"
+      ],
+      "@pal/tool-animated": [
+        "./packages/tool-animated/src/index.ts"
       ]
     }
   },

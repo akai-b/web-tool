@@ -1,45 +1,52 @@
-import React, { useState } from 'react'
+import React from 'react'
+import { ImageIcon } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger, Separator } from '@pal/ui'
 import { ImageCompressTool, ImageConvertTool } from '@pal/tool-image'
-import { GifMakerTool } from '@pal/tool-gif-maker'
+import { AnimatedMakerTool, AnimatedConverterTool } from '@pal/tool-animated'
 
-type Tab = 'compress' | 'convert' | 'gif-maker'
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'compress',  label: '图片压缩' },
-  { id: 'convert',   label: '图片转换' },
-  { id: 'gif-maker', label: 'GIF 制作' },
-]
+const tabTriggerClass =
+  "h-11 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none px-4 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
 
 export function App() {
-  const [tab, setTab] = useState<Tab>('compress')
-
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      {/* Tab bar */}
-      <header className="bg-white border-b border-gray-200 px-4">
-        <nav className="flex gap-0">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
-                tab === t.id
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </nav>
+    <div className="flex flex-col h-screen bg-background">
+      {/* App header */}
+      <header className="h-12 flex items-center gap-3 border-b bg-card px-6 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
+            <ImageIcon className="w-3.5 h-3.5 text-primary-foreground" />
+          </div>
+          <span className="font-semibold text-sm text-foreground">ToolPal</span>
+          <Separator orientation="vertical" className="h-4 mx-0.5" />
+          <span className="text-xs text-muted-foreground">图像工具</span>
+        </div>
       </header>
 
-      {/* Content */}
-      <main className="flex-1 overflow-auto">
-        {tab === 'compress'  && <ImageCompressTool />}
-        {tab === 'convert'   && <ImageConvertTool />}
-        {tab === 'gif-maker' && <GifMakerTool />}
-      </main>
+      {/* Tabs navigation + content */}
+      <Tabs defaultValue="compress" className="flex-1 flex flex-col overflow-hidden">
+        <div className="border-b bg-card px-6 shrink-0">
+          <TabsList className="h-11 bg-transparent p-0 gap-1 rounded-none">
+            <TabsTrigger value="compress" className={tabTriggerClass}>图片压缩</TabsTrigger>
+            <TabsTrigger value="convert" className={tabTriggerClass}>图片转换</TabsTrigger>
+            <TabsTrigger value="animated-maker" className={tabTriggerClass}>动图制作</TabsTrigger>
+            <TabsTrigger value="animated-converter" className={tabTriggerClass}>动图转换</TabsTrigger>
+          </TabsList>
+        </div>
+        <div className="flex-1 overflow-auto">
+          <TabsContent value="compress" className="mt-0 h-full">
+            <ImageCompressTool />
+          </TabsContent>
+          <TabsContent value="convert" className="mt-0 h-full">
+            <ImageConvertTool />
+          </TabsContent>
+          <TabsContent value="animated-maker" className="mt-0 h-full">
+            <AnimatedMakerTool />
+          </TabsContent>
+          <TabsContent value="animated-converter" className="mt-0 h-full">
+            <AnimatedConverterTool />
+          </TabsContent>
+        </div>
+      </Tabs>
     </div>
   )
 }

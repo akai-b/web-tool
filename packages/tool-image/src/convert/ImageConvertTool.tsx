@@ -1,7 +1,13 @@
 import React, { useState, useCallback } from 'react'
-import { ToolLayout, DropZone, FileList, Button } from '@pal/ui'
+import {
+  Card, CardContent,
+  DropZone, FileList, Button,
+  Slider, Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Label, Progress,
+} from '@pal/ui'
 import type { FileItem } from '@pal/ui'
 import { nanoid, downloadBytes } from '@pal/utils'
+import { useSharpConvert } from './useSharpConvert'
 
 export interface ImageConvertToolProps {
   className?: string
@@ -15,20 +21,26 @@ interface ConvertItem {
   status: 'pending' | 'processing' | 'done' | 'error'
   resultBlob?: Blob
   resultFilename?: string
+  originalSize?: number
   resultSize?: number
   error?: string
 }
 
-async function convertImage(file: File, format: OutputFormat, quality: number): Promise<{ blob: Blob; filename: string }> {
+async function convertImageCanvas(
+  file: File,
+  format: OutputFormat,
+  quality: number
+): Promise<{ blob: Blob; filename: string; originalSize: number; resultSize: number }> {
   const bitmap = await createImageBitmap(file)
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
   const ctx = canvas.getContext('2d')!
   ctx.drawImage(bitmap, 0, 0)
   bitmap.close()
-  const mimeType = `image/${format}`
+  const mimeType = format === 'jpeg' ? 'image/jpeg' : `image/${format}`
   const blob = await canvas.convertToBlob({ type: mimeType, quality: quality / 100 })
+  const ext = format === 'jpeg' ? 'jpg' : format
   const baseName = file.name.replace(/\.[^.]+$/, '')
-  return { blob, filename: `${baseName}.${format}` }
+  return { blob, filename: `${baseName}.${ext}`, originalSize: file.size, resultSize: blob.size }
 }
 
 export function ImageConvertTool({ className }: ImageConvertToolProps) {
@@ -36,6 +48,7 @@ export function ImageConvertTool({ className }: ImageConvertToolProps) {
   const [format, setFormat] = useState<OutputFormat>('webp')
   const [quality, setQuality] = useState(85)
   const [processing, setProcessing] = useState(false)
+  const { isAvailable: isSharpAvailable, convertWithSharp } = useSharpConvert()
 
   const handleFiles = useCallback((files: File[]) => {
     setItems((prev) => [
@@ -55,9 +68,13 @@ export function ImageConvertTool({ className }: ImageConvertToolProps) {
       if (item.status === 'done') continue
       setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, status: 'processing' } : i))
       try {
-        const { blob, filename } = await convertImage(item.file, format, quality)
+        const result = isSharpAvailable
+          ? await convertWithSharp(item.file, format, quality)
+          : await convertImageCanvas(item.file, format, quality)
         setItems((prev) => prev.map((i) =>
-          i.id === item.id ? { ...i, status: 'done', resultBlob: blob, resultFilename: filename, resultSize: blob.size } : i
+          i.id === item.id
+            ? { ...i, status: 'done', resultBlob: result.blob, resultFilename: result.filename, originalSize: result.originalSize, resultSize: result.resultSize }
+            : i
         ))
       } catch (e) {
         setItems((prev) => prev.map((i) =>
@@ -66,7 +83,7 @@ export function ImageConvertTool({ className }: ImageConvertToolProps) {
       }
     }
     setProcessing(false)
-  }, [items, format, quality, processing])
+  }, [items, format, quality, processing, isSharpAvailable, convertWithSharp])
 
   const handleDownloadAll = useCallback(() => {
     items.forEach((i) => {
@@ -88,55 +105,73 @@ export function ImageConvertTool({ className }: ImageConvertToolProps) {
   }))
 
   const doneCount = items.filter((i) => i.status === 'done').length
+  const progress = items.length > 0 ? (doneCount / items.length) * 100 : 0
 
   return (
-    <ToolLayout title="图片格式转换" description="将图片批量转换为 JPEG / PNG / WebP / AVIF" className={className}>
-      <div className="space-y-6">
-        <div className="flex flex-wrap gap-4 items-end">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-600">目标格式</span>
-            <select
-              value={format}
-              onChange={(e) => setFormat(e.target.value as OutputFormat)}
-              className="border border-gray-300 rounded px-2 py-1 text-sm"
-            >
-              <option value="jpeg">JPEG</option>
-              <option value="png">PNG</option>
-              <option value="webp">WebP</option>
-              <option value="avif">AVIF</option>
-            </select>
-          </label>
-          {format !== 'png' && (
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-gray-600">质量 ({quality})</span>
-              <input
-                type="range" min={1} max={100} value={quality}
-                onChange={(e) => setQuality(Number(e.target.value))}
-                className="w-40"
-              />
-            </label>
-          )}
-        </div>
+    <div className="max-w-4xl mx-auto px-6 py-6 space-y-4">
+      {/* 设置区 */}
+      <Card>
+        <CardContent className="pt-5">
+          <div className="grid grid-cols-2 gap-5">
+            <div className="space-y-2">
+              <Label>目标格式</Label>
+              <Select value={format} onValueChange={(v) => setFormat(v as OutputFormat)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="jpeg">JPEG</SelectItem>
+                  <SelectItem value="png">PNG</SelectItem>
+                  <SelectItem value="webp">WebP</SelectItem>
+                  <SelectItem value="avif">AVIF</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-        <DropZone accept="image/*" onFiles={handleFiles} className="h-40" />
+            {format !== 'png' && (
+              <div className="space-y-2">
+                <Label>
+                  质量
+                  <span className="ml-1 font-normal text-muted-foreground">({quality}%)</span>
+                </Label>
+                <div className="pt-2.5">
+                  <Slider
+                    value={[quality]}
+                    onValueChange={([v]) => setQuality(v)}
+                    min={1}
+                    max={100}
+                    step={1}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
-        {items.length > 0 && (
-          <>
+      {/* 拖拽上传区 */}
+      <DropZone accept="image/*" onFiles={handleFiles} className="h-36" />
+
+      {/* 文件列表 + 操作 */}
+      {items.length > 0 && (
+        <Card>
+          <CardContent className="pt-5 space-y-3">
             <FileList files={fileItems} onRemove={handleRemove} />
-            <div className="flex gap-3">
+            {processing && <Progress value={progress} className="h-1.5" />}
+            <div className="flex items-center gap-2 pt-1">
               <Button onClick={handleConvert} disabled={processing}>
                 {processing ? '转换中…' : '开始转换'}
               </Button>
               {doneCount > 0 && (
-                <Button variant="secondary" onClick={handleDownloadAll}>
+                <Button variant="outline" onClick={handleDownloadAll}>
                   下载全部 ({doneCount})
                 </Button>
               )}
               <Button variant="ghost" onClick={() => setItems([])}>清空</Button>
             </div>
-          </>
-        )}
-      </div>
-    </ToolLayout>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   )
 }

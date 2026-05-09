@@ -1,10 +1,9 @@
 import { defineConfig } from 'vite'
-import UnoCSS from 'unocss/vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 
 export default defineConfig({
-  plugins: [UnoCSS(), react()],
+  plugins: [react()],
   resolve: {
     alias: {
       '@pal/ui': resolve(__dirname, '../../packages/ui/src/index.ts'),
